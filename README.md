@@ -149,6 +149,8 @@ Example install from Git:
 
 `pip install "git+ssh://git@github.com/<org>/<repo>.git@main#subdirectory=admin_notes"`
 
+`django-admin-notes @ git+https://github.com/ARezaK/Django-Admin-Notes.git`
+
 ## Compatibility
 
 - Built against Django 3.2 patterns used in this codebase.
