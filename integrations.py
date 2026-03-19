@@ -139,17 +139,30 @@ class AdminNotesDirectUserAdminMixin:
                 return True
         return False
 
-    def get_form(self, request, obj=None, **kwargs):
-        form = super().get_form(request, obj, **kwargs)
+    def _build_admin_notes_form_class(self, base_form):
         field_name = self.admin_notes_field_name
-        if field_name not in form.base_fields:
-            form.base_fields[field_name] = forms.CharField(
+        if field_name in getattr(base_form, 'declared_fields', {}):
+            return base_form
+
+        attrs = {
+            field_name: forms.CharField(
                 label=self.admin_notes_field_label,
                 required=False,
                 widget=forms.Textarea(attrs={'rows': self.admin_notes_field_rows}),
                 help_text=self.admin_notes_field_help_text,
             )
-        return form
+        }
+        return type(f'AdminNotes{base_form.__name__}', (base_form,), attrs)
+
+    def get_form(self, request, obj=None, **kwargs):
+        base_form = kwargs.get('form')
+        if base_form is None:
+            if obj is None and hasattr(self, 'add_form'):
+                base_form = self.add_form
+            else:
+                base_form = self.form
+        kwargs['form'] = self._build_admin_notes_form_class(base_form)
+        return super().get_form(request, obj, **kwargs)
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
