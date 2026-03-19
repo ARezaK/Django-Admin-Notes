@@ -102,7 +102,7 @@ class UserProfileInline(AdminNotesProfileInlineMixin, admin.StackedInline):
 
 ### Example C: No profile model, direct `UserAdmin` integration (simple)
 
-Use this when you want one write-only "Add admin note" field on the user admin page and no inline/history UI.
+Use this when you want notes directly on the user admin page without a profile inline.
 
 ```python
 from django.contrib import admin
@@ -127,9 +127,13 @@ admin.site.register(User, UserAdmin)
 ```
 
 How this works:
-- Adds a write-only textarea field to the user edit form.
+- Shows recent admin note history (with delete links).
+- Adds a textarea field to the user edit form.
 - On save, creates an `AdminNote` row if text was entered.
-- Leaves note history to `/admin/admin_notes/adminnote/` list page.
+
+Optional direct-mixin settings:
+- `admin_notes_show_history = True` (default)
+- `admin_notes_history_limit = 25`
 
 ## Writing notes in views/services
 

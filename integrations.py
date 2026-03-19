@@ -116,6 +116,10 @@ class AdminNotesDirectUserAdminMixin:
     admin_notes_field_rows = 3
     admin_notes_fieldset_title = ugettext_lazy('Admin notes')
     admin_notes_target_user_attr = None
+    admin_notes_show_history = True
+    admin_notes_history_field_name = 'admin_note_history'
+    admin_notes_history_limit = 25
+    admin_notes_history_title = 'Admin note history (newest first)'
 
     def _get_admin_notes_target_user(self, obj):
         if obj is None:
@@ -123,6 +127,9 @@ class AdminNotesDirectUserAdminMixin:
         if self.admin_notes_target_user_attr:
             return getattr(obj, self.admin_notes_target_user_attr, None)
         return obj
+
+    def _get_admin_notes_history_field_name(self):
+        return self.admin_notes_history_field_name
 
     def _fieldset_contains_field(self, fieldset_fields, field_name):
         if isinstance(fieldset_fields, (tuple, list)):
@@ -132,12 +139,46 @@ class AdminNotesDirectUserAdminMixin:
             return False
         return fieldset_fields == field_name
 
-    def _admin_note_field_already_present(self, fieldsets):
-        field_name = self.admin_notes_field_name
+    def _field_is_present_in_fieldsets(self, fieldsets, field_name):
         for _, options in fieldsets:
             if self._fieldset_contains_field(options.get('fields', ()), field_name):
                 return True
         return False
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly_fields = list(super().get_readonly_fields(request, obj))
+        if self.admin_notes_show_history:
+            readonly_fields.append(self._get_admin_notes_history_field_name())
+        return tuple(dict.fromkeys(readonly_fields))
+
+    def admin_note_history(self, obj):
+        if not obj:
+            return '-'
+
+        target_user = self._get_admin_notes_target_user(obj)
+        if target_user is None:
+            return '-'
+
+        notes = AdminNote.objects.filter(user=target_user).select_related('created_by')[: self.admin_notes_history_limit]
+        if not notes:
+            return '-'
+
+        rendered_notes = format_html_join(
+            '',
+            '<li><strong>{}</strong> [{}]<br>{}<br><a href="{}">Delete</a></li>',
+            (
+                (
+                    timezone.localtime(note.created_at).strftime('%Y-%m-%d %H:%M'),
+                    note.created_by.username if note.created_by else 'system',
+                    note.text,
+                    reverse('admin:admin_notes_adminnote_delete', args=[note.id]),
+                )
+                for note in notes
+            ),
+        )
+        return format_html('<ol>{}</ol>', rendered_notes)
+
+    admin_note_history.short_description = admin_notes_history_title
 
     def _build_admin_notes_form_class(self, base_form):
         field_name = self.admin_notes_field_name
@@ -166,10 +207,23 @@ class AdminNotesDirectUserAdminMixin:
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
-        if self._admin_note_field_already_present(fieldsets):
+        has_note_field = self._field_is_present_in_fieldsets(fieldsets, self.admin_notes_field_name)
+        history_field_name = self._get_admin_notes_history_field_name()
+        has_history_field = self.admin_notes_show_history and self._field_is_present_in_fieldsets(
+            fieldsets, history_field_name
+        )
+
+        if has_note_field and (not self.admin_notes_show_history or has_history_field):
             return tuple(fieldsets)
 
-        fieldsets.append((self.admin_notes_fieldset_title, {'fields': (self.admin_notes_field_name,)}))
+        fields = []
+        if self.admin_notes_show_history and not has_history_field:
+            fields.append(history_field_name)
+        if not has_note_field:
+            fields.append(self.admin_notes_field_name)
+
+        if fields:
+            fieldsets.append((self.admin_notes_fieldset_title, {'fields': tuple(fields)}))
         return tuple(fieldsets)
 
     def save_model(self, request, obj, form, change):
