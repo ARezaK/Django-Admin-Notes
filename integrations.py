@@ -107,3 +107,70 @@ class AdminNotesUserAdminMixin:
                 continue
 
             AdminNote.objects.create(user=target_user, text=note_text, created_by=request.user)
+
+
+class AdminNotesDirectUserAdminMixin:
+    admin_notes_field_name = 'new_admin_note'
+    admin_notes_field_label = ugettext_lazy('Add admin note')
+    admin_notes_field_help_text = ugettext_lazy('Adds a new append-only note for this user.')
+    admin_notes_field_rows = 3
+    admin_notes_fieldset_title = ugettext_lazy('Admin notes')
+    admin_notes_target_user_attr = None
+
+    def _get_admin_notes_target_user(self, obj):
+        if obj is None:
+            return None
+        if self.admin_notes_target_user_attr:
+            return getattr(obj, self.admin_notes_target_user_attr, None)
+        return obj
+
+    def _fieldset_contains_field(self, fieldset_fields, field_name):
+        if isinstance(fieldset_fields, (tuple, list)):
+            for value in fieldset_fields:
+                if self._fieldset_contains_field(value, field_name):
+                    return True
+            return False
+        return fieldset_fields == field_name
+
+    def _admin_note_field_already_present(self, fieldsets):
+        field_name = self.admin_notes_field_name
+        for _, options in fieldsets:
+            if self._fieldset_contains_field(options.get('fields', ()), field_name):
+                return True
+        return False
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        field_name = self.admin_notes_field_name
+        if field_name not in form.base_fields:
+            form.base_fields[field_name] = forms.CharField(
+                label=self.admin_notes_field_label,
+                required=False,
+                widget=forms.Textarea(attrs={'rows': self.admin_notes_field_rows}),
+                help_text=self.admin_notes_field_help_text,
+            )
+        return form
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        if self._admin_note_field_already_present(fieldsets):
+            return tuple(fieldsets)
+
+        fieldsets.append((self.admin_notes_fieldset_title, {'fields': (self.admin_notes_field_name,)}))
+        return tuple(fieldsets)
+
+    def save_model(self, request, obj, form, change):
+        cleaned_data = getattr(form, 'cleaned_data', {}) or {}
+        note_text = (cleaned_data.get(self.admin_notes_field_name) or '').strip()
+
+        super().save_model(request, obj, form, change)
+
+        if not note_text:
+            return
+
+        target_user = self._get_admin_notes_target_user(obj)
+        if target_user is None:
+            return
+
+        created_by = request.user if getattr(request.user, 'is_authenticated', False) else None
+        AdminNote.objects.create(user=target_user, text=note_text, created_by=created_by)

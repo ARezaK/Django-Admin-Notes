@@ -1,4 +1,3 @@
-@ -0,0 +1,170 @@
 # admin_notes
 
 Reusable Django app for internal append-only admin notes on users.
@@ -12,7 +11,7 @@ Reusable Django app for internal append-only admin notes on users.
   - `created_at`
 - Django admin list view with:
   - text search
-  - filter by creator/date
+  - filter by date
   - newest-first ordering
   - add/edit blocked from list/change UI
   - delete allowed when user has admin delete permission
@@ -20,6 +19,7 @@ Reusable Django app for internal append-only admin notes on users.
   - `AdminNotesInlineFormMixin`
   - `AdminNotesProfileInlineMixin`
   - `AdminNotesUserAdminMixin`
+  - `AdminNotesDirectUserAdminMixin`
 
 ## Files
 
@@ -100,28 +100,36 @@ class UserProfileInline(AdminNotesProfileInlineMixin, admin.StackedInline):
     admin_notes_target_user_attr = "user"
 ```
 
-### Example C: No profile model, integrate directly into `UserAdmin`
+### Example C: No profile model, direct `UserAdmin` integration (simple)
 
-Use this when your project edits users directly and does not use a profile inline.
+Use this when you want one write-only "Add admin note" field on the user admin page and no inline/history UI.
 
 ```python
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import User
 
-from admin_notes.integrations import AdminNotesUserAdminMixin
-from admin_notes.models import AdminNote
+from admin_notes.integrations import AdminNotesDirectUserAdminMixin
 
 
-class UserAdmin(AdminNotesUserAdminMixin, DjangoUserAdmin):
-    # No inline. You can still create notes in actions/views/services.
-    # If needed, override save_formset only when you add an inline note field.
-    pass
+class UserAdmin(AdminNotesDirectUserAdminMixin, DjangoUserAdmin):
+    list_display = ('username', 'email', 'is_staff', 'is_active')
+    search_fields = ('username', 'email')
+
+    # Optional customization:
+    # admin_notes_field_name = 'internal_note'
+    # admin_notes_fieldset_title = 'Internal Notes'
+    # admin_notes_target_user_attr = None  # default: note user is obj itself
 
 
 admin.site.unregister(User)
 admin.site.register(User, UserAdmin)
 ```
+
+How this works:
+- Adds a write-only textarea field to the user edit form.
+- On save, creates an `AdminNote` row if text was entered.
+- Leaves note history to `/admin/admin_notes/adminnote/` list page.
 
 ## Writing notes in views/services
 
