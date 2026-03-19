@@ -5,10 +5,10 @@ from admin_notes.models import AdminNote
 
 @admin.register(AdminNote)
 class AdminNoteAdmin(admin.ModelAdmin):
-    list_display = ('user', 'note_preview')
+    list_display = ('user', 'created_by', 'created_at',  'note_preview')
     search_fields = ('text', 'user__username')
-    list_filter = ('created_by', 'created_at')
-    ordering = ('-id',)
+    list_filter = ('created_at')
+    ordering = ('-created_at', '-id')
     date_hierarchy = 'created_at'
     actions = None
 
